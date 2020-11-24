@@ -15,14 +15,19 @@ function readFile(file) {
 
 const infoURI = "info_df.csv";
 const jhDataURI = "time_series_covid19_confirmed_US.csv";
+const deathsURI = "deaths_US.csv";
+
 const info_dfFile = readFile(infoURI);
 const jhDataFile = readFile(jhDataURI);
+const deathsFile = readFile(deathsURI);
 
 const infoCSV = d3.csvParse(info_dfFile, d3.autoType);
 const jhDataCSV = d3.csvParse(jhDataFile, d3.autoType);
+const deathsCSV = d3.csvParse(deathsFile, d3.autoType);
 
 console.log("jhDataCsv", jhDataCSV);
 console.log("infoCSV", infoCSV);
+console.log("deathsCSV", deathsCSV);
 
 // Scatterplot data massaging
 
@@ -43,16 +48,29 @@ const mergedJhData = jhDataCSV.reduce((acc, node) => {
     }
   });
 
-  // Admin2 represents county. Creating unique identifier here so we can map later
-  acc[`${node.Admin2}, ${node.Province_State}`] = total;
+  // FIPS is a unique county identification code
+  acc[node.FIPS] = { cases: total, deaths: 0 };
   return acc;
 }, {});
+
+// Adding deaths to the mergedJhData
+deathsCSV.forEach((node) => {
+  let total = 0;
+
+  Object.keys(node).forEach((key) => {
+    if (isValidDate(key)) {
+      total += node[key];
+    }
+  });
+
+  mergedJhData[node.FIPS].deaths = total;
+});
 
 // Converting the list to a map with the same unique identifier as in mergedJhData so that we can easily
 // create scatterplot points
 const locationToInfoMap = infoCSV.reduce((acc, node) => {
-  const idString = `${node.county}, ${node.state}`;
-  acc[idString] = node;
+  // info_df uses lowercase for fips
+  acc[node.fips] = node;
 
   return acc;
 }, {});
@@ -77,7 +95,7 @@ const casesToFemalePoints = generateScatterplotPoints("tot_female");
 console.log("these are the scatterplot points", casesToFemalePoints);
 
 // Running totals by state
-const dateToStateCasesMap = jhDataCSV.reduce((acc, node) => {
+const dateToStateCasesDeathsMap = jhDataCSV.reduce((acc, node) => {
   Object.keys(node).forEach((key) => {
     if (isValidDate(key)) {
       // Setting the date on the map
@@ -86,14 +104,34 @@ const dateToStateCasesMap = jhDataCSV.reduce((acc, node) => {
       }
       // If the state doesn't exist on this date, initialize it
       if (!acc[key][node.Province_State]) {
-        acc[key][node.Province_State] = 0;
+        acc[key][node.Province_State] = { cases: 0, deaths: 0 };
       }
 
-      acc[key][node.Province_State] += node[key];
+      acc[key][node.Province_State].cases += node[key];
     }
   });
 
   return acc;
 }, {});
 
-console.log("running totals by state", dateToStateCasesMap);
+deathsCSV.forEach((node) => {
+  Object.keys(node).forEach((key) => {
+    if (isValidDate(key)) {
+      // Setting the date on the map
+      if (!dateToStateCasesDeathsMap[key]) {
+        dateToStateCasesDeathsMap[key] = {};
+      }
+      // If the state doesn't exist on this date, initialize it
+      if (!dateToStateCasesDeathsMap[key][node.Province_State]) {
+        dateToStateCasesDeathsMap[key][node.Province_State] = {
+          cases: 0,
+          deaths: 0,
+        };
+      }
+
+      dateToStateCasesDeathsMap[key][node.Province_State].deaths += node[key];
+    }
+  });
+});
+
+console.log("running totals by state", dateToStateCasesDeathsMap);
