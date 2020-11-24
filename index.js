@@ -36,6 +36,17 @@ function isValidDate(dateString) {
   return date instanceof Date && !isNaN(date);
 }
 
+// Converting the list to a map with the same unique identifier as in mergedJhData so that we can easily
+// create scatterplot points
+const locationToInfoMap = {};
+const stateToTotalPopMap = {};
+infoCSV.forEach((node) => {
+  // info_df uses lowercase for fips
+  locationToInfoMap[node.fips] = node;
+  stateToTotalPopMap[node.state] =
+    (stateToTotalPopMap[node.state] || 0) + node.tot_pop;
+});
+
 // Just taking the raw CSV and parsing all fields. If the key is a valid date, we know that it
 // represents a field that contains a number of cases. Otherwise, we know it's just metatdata
 // that can be ignored for scatterplot purposes
@@ -49,7 +60,14 @@ const mergedJhData = jhDataCSV.reduce((acc, node) => {
   });
 
   // FIPS is a unique county identification code
-  acc[node.FIPS] = { cases: total, deaths: 0 };
+  acc[node.FIPS] = {
+    cases: total,
+    cpm:
+      (1e6 * total) /
+      ((locationToInfoMap[node.FIPS] || {}).tot_pop || Infinity),
+    deaths: 0,
+    dpm: 0,
+  };
   return acc;
 }, {});
 
@@ -64,28 +82,23 @@ deathsCSV.forEach((node) => {
   });
 
   mergedJhData[node.FIPS].deaths = total;
-});
-
-// Converting the list to a map with the same unique identifier as in mergedJhData so that we can easily
-// create scatterplot points
-const locationToInfoMap = {};
-const stateToTotalPopMap = {};
-infoCSV.forEach((node) => {
-  // info_df uses lowercase for fips
-  locationToInfoMap[node.fips] = node;
-  stateToTotalPopMap[node.state] =
-    (stateToTotalPopMap[node.state] || 0) + node.tot_pop;
+  mergedJhData[node.FIPS].dpm =
+    (1e6 * total) / ((locationToInfoMap[node.FIPS] || {}).tot_pop || Infinity);
 });
 
 console.log("merged", mergedJhData);
 console.log("mapped", locationToInfoMap);
 
-// Creates an array of tuples containing [x, y] mapping of number of total cases to {variable}, where
-// variable is a field in info_df.csv
-function generateScatterplotPoints(variable) {
+// Creates an array of tuples containing [x, y] mapping of [number of total cases to {variable} (where
+// variable is a field in info_df.csv), {field} (one of deaths, cases, cpm, or dpm)]
+function generateScatterplotPoints(field, variable) {
   return Object.entries(mergedJhData).reduce((acc, [key, value]) => {
-    if (locationToInfoMap[key] && locationToInfoMap[key][variable] != null) {
-      acc.push([locationToInfoMap[key][variable], value]);
+    if (
+      locationToInfoMap[key] &&
+      locationToInfoMap[key][variable] != null &&
+      value[field] != null
+    ) {
+      acc.push([locationToInfoMap[key][variable], value[field]]);
     }
 
     return acc;
@@ -93,7 +106,7 @@ function generateScatterplotPoints(variable) {
 }
 
 // Example case here
-const casesToFemalePoints = generateScatterplotPoints("tot_female");
+const casesToFemalePoints = generateScatterplotPoints("dpm", "tot_female");
 console.log("these are the scatterplot points", casesToFemalePoints);
 
 // Running totals by state
