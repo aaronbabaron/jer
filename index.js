@@ -68,12 +68,14 @@ deathsCSV.forEach((node) => {
 
 // Converting the list to a map with the same unique identifier as in mergedJhData so that we can easily
 // create scatterplot points
-const locationToInfoMap = infoCSV.reduce((acc, node) => {
+const locationToInfoMap = {};
+const stateToTotalPopMap = {};
+infoCSV.forEach((node) => {
   // info_df uses lowercase for fips
-  acc[node.fips] = node;
-
-  return acc;
-}, {});
+  locationToInfoMap[node.fips] = node;
+  stateToTotalPopMap[node.state] =
+    (stateToTotalPopMap[node.state] || 0) + node.tot_pop;
+});
 
 console.log("merged", mergedJhData);
 console.log("mapped", locationToInfoMap);
@@ -104,10 +106,15 @@ const dateToStateCasesDeathsMap = jhDataCSV.reduce((acc, node) => {
       }
       // If the state doesn't exist on this date, initialize it
       if (!acc[key][node.Province_State]) {
-        acc[key][node.Province_State] = { cases: 0, deaths: 0 };
+        acc[key][node.Province_State] = { cases: 0, deaths: 0, dpm: 0, cpm: 0 };
       }
 
+      const statePopulation = stateToTotalPopMap[node.Province_State];
       acc[key][node.Province_State].cases += node[key];
+      acc[key][node.Province_State].cpm +=
+        // There are a few areas such as US territories where we do not have population info. Those will
+        // show 0 for CPM and DPM
+        (1e6 * node[key]) / (statePopulation || Infinity);
     }
   });
 
@@ -126,10 +133,17 @@ deathsCSV.forEach((node) => {
         dateToStateCasesDeathsMap[key][node.Province_State] = {
           cases: 0,
           deaths: 0,
+          dpm: 0,
+          cpm: 0,
         };
       }
 
+      const statePopulation = stateToTotalPopMap[node.Province_State];
       dateToStateCasesDeathsMap[key][node.Province_State].deaths += node[key];
+      dateToStateCasesDeathsMap[key][node.Province_State].dpm +=
+        // There are a few areas such as US territories where we do not have population info. Those will
+        // show 0 for CPM and DPM
+        (1e6 * node[key]) / (statePopulation || Infinity);
     }
   });
 });
