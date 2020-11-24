@@ -72,5 +72,28 @@ function generateScatterplotPoints(variable) {
   }, []);
 }
 
+// Example case here
 const casesToFemalePoints = generateScatterplotPoints("tot_female");
 console.log("these are the scatterplot points", casesToFemalePoints);
+
+// Running totals by state
+const dateToStateCasesMap = jhDataCSV.reduce((acc, node) => {
+  Object.keys(node).forEach((key) => {
+    if (isValidDate(key)) {
+      // Setting the date on the map
+      if (!acc[key]) {
+        acc[key] = {};
+      }
+      // If the state doesn't exist on this date, initialize it
+      if (!acc[key][node.Province_State]) {
+        acc[key][node.Province_State] = 0;
+      }
+
+      acc[key][node.Province_State] += node[key];
+    }
+  });
+
+  return acc;
+}, {});
+
+console.log("running totals by state", dateToStateCasesMap);
